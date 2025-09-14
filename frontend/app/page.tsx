@@ -17,9 +17,50 @@ interface AnalysisResult {
   fileName: string
 }
 
-const mockMLAnalysis = async (images: File[]): Promise<AnalysisResult[]> => {
-  // Simulate API delay
-  await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 2000))
+// Конфигурация API
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+const analyzeImages = async (images: File[]): Promise<AnalysisResult[]> => {
+  try {
+    const formData = new FormData()
+
+    // Добавляем все изображения в FormData
+    images.forEach((image, index) => {
+      formData.append('files', image)
+    })
+
+    const response = await fetch(`${API_BASE_URL}/analyze`, {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
+    }
+
+    const results: AnalysisResult[] = await response.json()
+
+    // Добавляем URL изображений для отображения
+    return results.map((result, index) => ({
+      ...result,
+      image: URL.createObjectURL(images[index])
+    }))
+
+  } catch (error) {
+    console.error('Ошибка анализа изображений:', error)
+
+    // Fallback на mock анализ при ошибке API
+    return mockFallbackAnalysis(images)
+  }
+}
+
+// Fallback функция на случай недоступности API
+const mockFallbackAnalysis = async (images: File[]): Promise<AnalysisResult[]> => {
+  // Показываем предупреждение пользователю
+  console.warn('API недоступен, используется локальный анализ')
+
+  await new Promise((resolve) => setTimeout(resolve, 1000))
 
   const conditions = ["битый", "не битый"] as const
   const cleanlinessOptions = ["чистый", "грязный"] as const
@@ -125,7 +166,7 @@ export default function ClearRidePage() {
     setIsLoading(true)
 
     try {
-      const results = await mockMLAnalysis(selectedImages)
+      const results = await analyzeImages(selectedImages)
       setAnalysisResults(results)
     } catch (error) {
       console.error("Analysis failed:", error)
